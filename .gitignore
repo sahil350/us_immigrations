@@ -148,4 +148,5 @@ metastore_db
 
 derby.log
 
+config.cfg
 sas_data/
