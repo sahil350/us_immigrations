@@ -18,6 +18,8 @@ analytics_dir = config.get('OUTPUT', 'ANALYTICS_PREFIX')
 
 def check_time_table(spark):
     """
+    This method performs data quality check for the time
+    dimension table
     """
     # get the path of time table
     time_path = analytics_dir + 'time/'
@@ -29,6 +31,8 @@ def check_time_table(spark):
 
 def check_immigrations_table(spark):
     """
+    This method performs data quality check for the immigrations
+    fact table
     """
     # get the path of immigrations table
     immigration_path = analytics_dir + 'immigrations/'
@@ -40,6 +44,8 @@ def check_immigrations_table(spark):
 
 def check_temp_table(spark):
     """
+    This method performs data quality check for the temperature
+    dimension table
     """
     # get the path of temperature table
     temp_path = analytics_dir + 'temperature/'
@@ -51,6 +57,8 @@ def check_temp_table(spark):
 
 def check_states_table(spark):
     """
+    This method performs data quality check for the states
+    dimension table
     """
     # get the path of states table
     states_path = analytics_dir + 'states/'

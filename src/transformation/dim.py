@@ -60,6 +60,8 @@ def create_and_save_immigrants_table(spark):
 
 def create_and_save_states_dim_table(spark):
     """
+    This method extracts relevant fields from staging tables, creates 
+    states dim table and finally saves it in the path as per config file
     """
     
     # set the states path
@@ -96,6 +98,8 @@ def create_and_save_states_dim_table(spark):
     
 def create_and_save_cities_dim_table(spark):
     """
+    This method extracts relevant fields from staging tables, creates 
+    cities dim table and finally saves it in the path as per config file
     """
     
     # set the path
@@ -132,6 +136,8 @@ def create_and_save_cities_dim_table(spark):
     
 def create_and_save_temp_dim_table(spark):
     """
+    This method extracts relevant fields from staging tables, creates 
+    us temperature dim table and finally saves it in the path as per config file
     """
     
     # temperature staging path
@@ -162,6 +168,8 @@ def create_and_save_temp_dim_table(spark):
     
 def create_and_save_airports_dim_table(spark):
     """
+    This method extracts relevant fields from staging tables, creates 
+    airports dim table and finally saves it in the path as per config file
     """
     
     # get the path
@@ -193,6 +201,8 @@ def create_and_save_airports_dim_table(spark):
     
 def create_and_save_time_dim_table(spark):
     """
+    This method extracts relevant fields from staging tables, creates 
+    time dim table and finally saves it in the path as per config file
     """
     
     # get path
