@@ -13,6 +13,7 @@ from pyspark.sql.functions import udf
 from transformation.staging import *
 from transformation.fact import *
 from transformation.dim import *
+from data_quality import *
 
 def create_spark():
     """Creates and Returns a SparkSession object"""
@@ -85,4 +86,7 @@ if __name__ == "__main__":
     create_and_save_time_dim_table(spark)
     
     # call the data quality check scripts
-    
+    check_time_table(spark)
+    check_immigrations_table(spark)
+    check_temp_table(spark)
+    check_states_table(spark)
