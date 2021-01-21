@@ -149,4 +149,15 @@ metastore_db
 derby.log
 
 config.cfg
+spark_etl_backup.ipynb
+
+airports/
+cities/
+immigrants/
+immigrations/
+input_data/
+states/
+temperature/
+time/
+
 sas_data/
