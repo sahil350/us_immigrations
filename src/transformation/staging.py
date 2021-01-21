@@ -418,7 +418,7 @@ def create_and_save_temperature_table():
     else:
         us_temp_df.to_csv(us_temp_path, index=False)
         
-def create_and_save_immigrations_table(spark):
+def create_and_save_immigrations_stg_table(spark):
     """
     This method creates the immigrations table and saves 
     it at the appropriate path as per the config file
