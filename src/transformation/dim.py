@@ -10,7 +10,7 @@ import numpy as np
 from pyspark.sql import SparkSession
 from pyspark.sql.types import IntegerType, DateType
 from pyspark.sql.functions import udf
-from constants import staging_dir, analytics_dir, input_dir
+from transformation.constants import staging_dir, analytics_dir, input_dir
 
 def create_and_save_immigrants_table(spark):
     """
@@ -22,7 +22,7 @@ def create_and_save_immigrants_table(spark):
     visa_path = os.path.join(input_dir, 'visa_category.csv')
     mode_path = os.path.join(input_dir, 'travel_mode.csv')
     country_path = os.path.join(input_dir, 'country_code.csv')
-    staging_1_path = staging_path + 'staging_1/'
+    staging_1_path = staging_dir + 'staging_1/'
     
     # read dfs
     mode = spark.read.csv(mode_path, header=True)
@@ -196,7 +196,7 @@ def create_and_save_time_dim_table(spark):
     """
     
     # get path
-    staging_1_path = staging_path + 'staging_1/'
+    staging_1_path = staging_dir + 'staging_1/'
     
     # read df
     staging_1 = spark.read.parquet(staging_1_path)

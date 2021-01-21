@@ -10,13 +10,17 @@ import numpy as np
 import configparser
 import boto3
 from io import StringIO, BytesIO
-from constants import s3_bucket, i94_label_path, us_cities_path
-from constants import temp_path, airports_path, output_dir, save_on_s3
-from constants import staging_dir, raw_data_path
+from transformation.constants import s3_bucket, i94_label_path, us_cities_path
+from transformation.constants import temp_path, airports_path, output_dir, save_on_s3
+from transformation.constants import staging_dir, raw_data_path, KEY, SECRET
 
 
 if save_on_s3:
-    s3_resource = boto3.resource('s3')
+    session = boto3.Session(
+        aws_access_key_id=KEY,
+        aws_secret_access_key=SECRET
+        )
+    s3_resource = session.resource('s3')
     
 def save_df_on_s3(df, path, index=True):
     """
@@ -122,6 +126,9 @@ def create_staging_tables_from_labels():
         'name': []
     }
     
+    # fill dicts
+    read_dicts_from_labels(citi_code, port, state)
+    
     # citi code dataframe
     citi_code_df = pd.DataFrame(citi_code)
     citi_code_df = citi_code_df.set_index('id')
@@ -218,8 +225,8 @@ def create_and_save_airports_table():
     port_path = os.path.join(output_dir,'port_immigration.csv')
     
     if save_on_s3:
-        obj = s3.get_object(Bucket=s3_bucket, Key=port_path)
-        us_city_code = pd.read_csv(io.BytesIO(obj['Body'].read()))
+        obj = s3_resource.Object(s3_bucket, port_path).get('Body')
+        us_city_code = pd.read_csv(BytesIO(obj['Body'].read()))
     else:
         us_city_code = pd.read_csv(port_path)
     
@@ -322,18 +329,18 @@ def create_and_save_us_cities_table():
     This method creates the us_cities table and saves 
     it at the appropriate path as per the config file
     """
+    # read us_cities table
+    us_cities = pd.read_csv(us_cities_path, sep=';')
+    
     # read us_city_code
     # ports table path
     port_path = os.path.join(output_dir,'port_immigration.csv')
     
     if save_on_s3:
-        obj = s3.get_object(Bucket=s3_bucket, Key=port_path)
-        us_city_code = pd.read_csv(io.BytesIO(obj['Body'].read()))
+        obj = s3_resource.Object(s3_bucket, port_path).get('Body')
+        us_city_code = pd.read_csv(BytesIO(obj['Body'].read()))
     else:
         us_city_code = pd.read_csv(port_path)
-    
-    # read us_cities table
-    us_cities = pd.read_csv(us_cities_path, sep=';')
     
     # for calculating % of each race
     us_cities_race = us_cities[['City', 'State Code', 'Race', 'Count']]
@@ -369,11 +376,11 @@ def create_and_save_us_cities_table():
     us_cities.city = us_cities.city.str.capitalize()
     
     # save according to the path in config file
-    us_cities_path = os.path.join(output_dir, 'us_cities.csv')
+    us_cities_path_save = os.path.join(output_dir, 'us_cities.csv')
     if save_on_s3:
-        save_df_on_s3(us_cities, us_cities_path, index=False)
+        save_df_on_s3(us_cities, us_cities_path_save, index=False)
     else:
-        us_cities.to_csv(us_cities_path, index=False)
+        us_cities.to_csv(us_cities_path_save, index=False)
     
 
 def create_and_save_temperature_table():
@@ -390,8 +397,8 @@ def create_and_save_temperature_table():
     port_path = os.path.join(output_dir,'port_immigration.csv')
     
     if save_on_s3:
-        obj = s3.get_object(Bucket=s3_bucket, Key=port_path)
-        us_city_code = pd.read_csv(io.BytesIO(obj['Body'].read()))
+        obj = s3_resource.Object(s3_bucket, port_path).get('Body')
+        us_city_code = pd.read_csv(BytesIO(obj['Body'].read()))
     else:
         us_city_code = pd.read_csv(port_path)
     
@@ -407,10 +414,13 @@ def create_and_save_temperature_table():
     # for joining with us_city_code
     us_temp_df.City = us_temp_df.City.str.lower()
     
+    # city code lower city
+    us_city_code.city = us_city_code.city.str.lower()
+    
     us_temp_df = us_city_code.merge(us_temp_df, left_on='city', right_on='City').\
         drop(['Country', 'City', 'city', 'state_code'], axis=1).\
         rename(columns={'code':'city_code'})
-    
+
     # save according to path given
     us_temp_path = os.path.join(output_dir, 'us_temperature.csv')
     if save_on_s3:

@@ -8,7 +8,7 @@ import os
 import configparser
 
 config = configparser.ConfigParser()
-config.read('../../config.cfg')
+config.read('config.cfg')
 
 #input_dir
 input_dir = config.get('INPUT', 'INPUT_DIR')
@@ -17,9 +17,9 @@ input_dir = config.get('INPUT', 'INPUT_DIR')
 staging_dir = config.get('OUTPUT', 'STAGING_PREFIX')
 analytics_dir = config.get('OUTPUT', 'ANALYTICS_PREFIX')
 
-# set AWS env variable
-os.environ['AWS_ACCESS_KEY_ID']=config.get('AWS', 'AWS_ACCESS_KEY_ID')
-os.environ['AWS_SECRET_ACCESS_KEY']=config.get('AWS', 'AWS_SECRET_ACCESS_KEY')
+# AWS Creds
+KEY = config.get('AWS', 'AWS_ACCESS_KEY_ID')
+SECRET = config.get('AWS', 'AWS_SECRET_ACCESS_KEY')
 
 # raw data path
 raw_data_path = config.get('INPUT', 'RAW_DATA_PATH')
