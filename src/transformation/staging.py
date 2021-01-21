@@ -9,9 +9,10 @@ import pandas as pd
 import numpy as np
 import configparser
 import boto3
-from io import StringIO
+from io import StringIO, BytesIO
 from constants import s3_bucket, i94_label_path, us_cities_path
 from constants import temp_path, airports_path, output_dir, save_on_s3
+from constants import staging_dir, raw_data_path
 
 
 if save_on_s3:
@@ -138,8 +139,10 @@ def create_staging_tables_from_labels():
        'WASHINGTON #INTL', 'WA (BPS)']
     
     # clean state_code
-    temp = np.where(port_df.state_code.isin(values), port_df.state_code.str[:2],\
-                    np.where(port_df.state_code.str.len()==2, port_df.state_code, np.nan))
+    temp = np.where(port_df.state_code.isin(values), \
+                    port_df.state_code.str[:2],\
+                    np.where(port_df.state_code.str.len()==2, \
+                             port_df.state_code, np.nan))
 
     us_state_codes = np.where(temp=='MX', np.nan, temp)
     port_df['state_code'] = us_state_codes
@@ -166,6 +169,8 @@ def create_staging_tables_from_labels():
         
 def create_and_save_visa_cat():
     """
+    This method creates the visa_category table and saves 
+    it at the appropriate path as per the config file
     """
     # visa category dataframe
     visa_category = pd.DataFrame({
@@ -184,6 +189,8 @@ def create_and_save_visa_cat():
         
 def create_and_save_mode_table():
     """
+    This method creates the travel_mode table and saves 
+    it at the appropriate path as per the config file
     """
     # travel mode dataframe
 
@@ -202,6 +209,238 @@ def create_and_save_mode_table():
     else:
         travel_mode.to_csv(travel_mode_path)
     
+def create_and_save_airports_table():
+    """
+    This method creates the airports table and saves 
+    it at the appropriate path as per the config file
+    """
+    # ports table path
+    port_path = os.path.join(output_dir,'port_immigration.csv')
+    
+    if save_on_s3:
+        obj = s3.get_object(Bucket=s3_bucket, Key=port_path)
+        us_city_code = pd.read_csv(io.BytesIO(obj['Body'].read()))
+    else:
+        us_city_code = pd.read_csv(port_path)
+    
+    # read airports df
+    airports = pd.read_csv(airports_path)
+    
+    # extract us small, medium, and large airports in cities
+    us_airports = airports[airports.iso_country.str.lower() == 'us']
 
+    us_airports = us_airports[us_airports.type.isin(\
+                            ['small_airport', 'medium_airport', 'large_airport'])]
 
+    us_intl_airports = us_airports[us_airports.name.str.contains('International')]
 
+    us_intl_airports = us_intl_airports[~us_intl_airports.municipality.isnull()]
+    
+    # split coordinates into latitude and longitude
+    long_lat = us_intl_airports['coordinates'].str.split(',', expand=True)
+    long_lat.columns = ['longitude', 'latitude']
+    us_intl_final = pd.concat([us_intl_airports, long_lat], axis=1).\
+                        drop('coordinates', axis=1)
+    
+    # merge with city_code df to get city codes in
+    # airports df and extract columns for dim table
+    us_city_code.city = us_city_code.city.str.lower()
+
+    us_intl_final.municipality = us_intl_final.municipality.str.lower() 
+
+    us_intl_final = us_city_code.merge(\
+                        us_intl_final, left_on='city', right_on='municipality')\
+                            [['ident', 'code', 'city', 'state_code',\
+                              'type', 'name','elevation_ft', 'gps_code',\
+                              'iata_code', 'local_code', 'latitude',\
+                              'longitude']]
+
+    us_intl_final.rename(columns={'code': 'city_code', 'ident': 'airport_id'}, \
+                         inplace=True)
+    
+    # save staging table according to the path provided in config
+    us_intl_path = os.path.join(output_dir, 'us_interantional_airport_codes.csv')
+    if save_on_s3:
+        save_df_on_s3(us_intl_final, us_intl_path, index=False)
+    else:
+        us_intl_final.to_csv(us_intl_path, index=False)
+        
+def create_and_save_us_states_table():
+    """
+    This method creates the us_states table and saves 
+    it at the appropriate path as per the config file
+    """
+    # read us cities table
+    us_cities = pd.read_csv(us_cities_path, sep=';')
+    
+    # relevant columns
+    columns = ['City', 'State Code', 'State', 'Total Population',\
+               'Female Population', 'Number of Veterans', 'Foreign-born',\
+               'Average Household Size', 'Race', 'Count']
+    
+    us_cities = us_cities[columns]
+    
+    # extract number of households
+    us_cities['num_households'] = np.round(us_cities['Total Population']/\
+                                           us_cities['Average Household Size'])
+    
+    us_states_race = us_cities.groupby(['State Code', 'Race']).\
+                    mean()['Count'].unstack()
+    
+    # percentage of each race
+    us_states_race = us_states_race.div(us_states_race.sum(axis=1), axis=0)
+    
+    us_states = us_cities.drop('Race', axis=1).\
+                drop_duplicates(['City', 'State Code']).\
+                drop(['City', 'Count'], axis=1)
+    
+    us_states = us_states.groupby(['State Code', 'State']).agg({
+                                'Total Population': 'sum',
+                                'Female Population': 'sum',
+                                'Number of Veterans': 'sum',
+                                'Foreign-born': 'sum',
+                                'num_households': 'sum'
+                            })
+    
+    # calculate average households in state
+    us_states['avg_households'] = np.round(us_states['Total Population']/\
+                                           us_states['num_households'], 2)
+    
+    # join the race table with us table
+    us_states = us_states.join(us_states_race)
+    
+    # save us states staging table as per the path in config file
+    us_states_path = os.path.join(output_dir, 'us_states.csv')
+    if save_on_s3:
+        save_df_on_s3(us_states, us_states_path)
+    else:
+        us_states.to_csv(us_states_path)
+        
+
+def create_and_save_us_cities_table():
+    """
+    This method creates the us_cities table and saves 
+    it at the appropriate path as per the config file
+    """
+    # read us_city_code
+    # ports table path
+    port_path = os.path.join(output_dir,'port_immigration.csv')
+    
+    if save_on_s3:
+        obj = s3.get_object(Bucket=s3_bucket, Key=port_path)
+        us_city_code = pd.read_csv(io.BytesIO(obj['Body'].read()))
+    else:
+        us_city_code = pd.read_csv(port_path)
+    
+    # read us_cities table
+    us_cities = pd.read_csv(us_cities_path, sep=';')
+    
+    # for calculating % of each race
+    us_cities_race = us_cities[['City', 'State Code', 'Race', 'Count']]
+    
+    # 
+    us_cities_race = us_cities_race.set_index(['City', 'State Code', \
+                                               'Race']).unstack(-1)
+    us_cities_race = us_cities_race['Count'].fillna(0)
+    
+    # each state and city is repeated five times for five races
+    us_cities = us_cities.drop_duplicates(['City', 'State Code'])
+    
+    # to join with us_cities_race
+    us_cities = us_cities.set_index(['City', 'State Code']).\
+                          drop(['Race', 'Count'], axis=1)
+    
+    us_cities = us_cities.join(us_cities_race)
+    
+    # caluclate percentage
+    for col in ['American Indian and Alaska Native', 'Asian',
+       'Black or African-American', 'Hispanic or Latino', 'White']:
+        us_cities[col] = us_cities[col]/us_cities['Total Population']
+    
+    us_cities = us_cities.reset_index()
+    
+    # for merging with us_city_code
+    us_cities.City = us_cities.City.str.lower()
+    
+    us_cities = us_city_code.merge(us_cities, left_on=['city', 'state_code'], \
+                               right_on=['City', 'State Code']).\
+                         drop(['City', 'State Code'], axis=1)
+    
+    us_cities.city = us_cities.city.str.capitalize()
+    
+    # save according to the path in config file
+    us_cities_path = os.path.join(output_dir, 'us_cities.csv')
+    if save_on_s3:
+        save_df_on_s3(us_cities, us_cities_path, index=False)
+    else:
+        us_cities.to_csv(us_cities_path, index=False)
+    
+
+def create_and_save_temperature_table():
+    """
+    This method creates the us_temperature table and saves 
+    it at the appropriate path as per the config file
+    """
+    # read temperature df
+    fname = temp_path
+    df = pd.read_csv(fname)
+    
+    # read us_city_code
+    # ports table path
+    port_path = os.path.join(output_dir,'port_immigration.csv')
+    
+    if save_on_s3:
+        obj = s3.get_object(Bucket=s3_bucket, Key=port_path)
+        us_city_code = pd.read_csv(io.BytesIO(obj['Body'].read()))
+    else:
+        us_city_code = pd.read_csv(port_path)
+    
+    # set datetime type for col dt
+    df['dt'] = pd.to_datetime(df['dt'])
+    
+    # extract temperature begining 20th century
+    temp_df = df[df.dt.dt.year > 1899]
+    
+    # extract us temperature
+    us_temp_df = temp_df[temp_df.Country == 'United States']
+    
+    # for joining with us_city_code
+    us_temp_df.City = us_temp_df.City.str.lower()
+    
+    us_temp_df = us_city_code.merge(us_temp_df, left_on='city', right_on='City').\
+        drop(['Country', 'City', 'city', 'state_code'], axis=1).\
+        rename(columns={'code':'city_code'})
+    
+    # save according to path given
+    us_temp_path = os.path.join(output_dir, 'us_temperature.csv')
+    if save_on_s3:
+        save_df_on_s3(us_temp_df, us_temp_path, index=False)
+    else:
+        us_temp_df.to_csv(us_temp_path, index=False)
+        
+def create_and_save_immigrations_table(spark):
+    """
+    This method creates the immigrations table and saves 
+    it at the appropriate path as per the config file
+    """
+    if 's3' in raw_data_path:
+        df_spark = spark.read.parquet(raw_data_path)
+    else:
+        df_spark = spark.read.format('com.github.saurfang.sas.spark').\
+                        load(raw_data_path)
+    # create a temporary view
+    df_spark.createOrReplaceTempView('immigrations_raw')
+    
+    # extract relevant columns
+    staging_1 = spark.sql("""
+        SELECT cicid, i94yr, i94mon, i94cit, i94port, arrdate, i94mode, i94addr, i94bir,
+               i94visa, count, occup, gender, visatype
+        FROM immigrations_raw
+        """)
+    
+    # set the correct path
+    staging_1_path = staging_dir + 'staging_1/'
+    
+    # dataframe as parquet
+    staging_1.write.mode('overwrite').parquet(staging_1_path)
+    
