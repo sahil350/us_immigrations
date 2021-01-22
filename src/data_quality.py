@@ -41,6 +41,20 @@ def check_immigrations_table(spark):
     immigrations = spark.read.parquet(immigration_path)
     
     assert len(immigrations.where(col('id').isNull()).collect()) == 0
+    
+def check_immigrations_table_unique_id(spark):
+    """
+    This method performs data quality check for the immigrations
+    fact table
+    """
+    # get the path of immigrations table
+    immigration_path = analytics_dir + 'immigrations/'
+    
+    # read the immigrations table
+    immigrations = spark.read.parquet(immigration_path)
+    
+    assert immigrations.count() == immigrations.select('id').distinct().count()
+    
 
 def check_temp_table(spark):
     """
