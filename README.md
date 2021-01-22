@@ -27,6 +27,7 @@ The resulting tables would allow for analysis such as the type of work they woul
     1. In the immigrations table, the id column doesn't have any missing values.
     2. The count in the states table is as expected.
     3. The maximum value of date in temperature and time table are as expected.
+    4. Check that the unique identifier of the fact table is indeed unique
 
 Note: some data preparatory steps like dropping duplicates, populating facts and dimension table with unique id were also perfomed.
 
